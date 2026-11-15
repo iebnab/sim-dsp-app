@@ -1,0 +1,5 @@
+# Synthetic report-export helper dependencies. Not installed anywhere.
+# Versions are deliberately old so dependency scanners have something to report.
+requests==2.25.1
+urllib3==1.26.4
+PyYAML==5.3.1

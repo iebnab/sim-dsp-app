@@ -1,0 +1,58 @@
+# Hardened CI variant: actions pinned by SHA, read-only token, verified scanner,
+# OIDC for deploys (no stored cloud keys). Synthetic fixture.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: "1.23"
+      - run: go vet ./...
+      - run: go build ./...
+
+  image-scan:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Build image
+        run: docker build -t sim-dsp-bidder:${{ github.sha }} .
+      - name: Fetch pinned, checksum-verified Trivy
+        env:
+          TRIVY_VERSION: "0.72.0"
+          TRIVY_SHA256: "bbb64b9695866ce4a7a8f5c9592002c5961cab378577fa3f8a040df362b9b2ea"
+        run: |
+          set -euo pipefail
+          tarball="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSL -o "$tarball" "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${tarball}"
+          echo "${TRIVY_SHA256}  ${tarball}" | sha256sum -c -
+          tar -xzf "$tarball" trivy
+      - name: Scan image (enforced)
+        run: ./trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed sim-dsp-bidder:${{ github.sha }}
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    needs: image-scan
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Exchange OIDC token for short-lived cloud credentials
+        run: echo "Deploys use workload identity federation; no stored keys."
