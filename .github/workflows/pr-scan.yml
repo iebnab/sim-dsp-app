@@ -1,0 +1,60 @@
+# Required pull-request scan (`pr-scan`), the merge gate of `main`.
+#
+# Copy of `.github/workflows/pr-scan.yml` in the customer repository. It is triggered by
+# `pull_request_target`, so GitHub runs this file as it is on `main`: a pull request can
+# neither change nor skip it. It carries no credential: the token is read-only, there is
+# no `id-token`, no secret, no environment and no `if:`. It checks out the merge commit
+# read-only, builds with the fixed command below (never a script, Makefile or composite
+# action from the pull request's tree), uses no cache, and runs pinned Trivy 0.72.0. It
+# also runs the CI Action (pinned to the same release as `iac.yml`, fetched from its
+# published repository, never from the pull request's tree) in assess-only mode over the
+# merge commit's `.github/workflows`: any zizmor or `ci:publish_requires_scan` finding
+# fails the check, except the dangerous-triggers audit on this file, so a pull request
+# that removes or weakens the scan gate stays unmergeable. It uploads nothing: a pull
+# request ref is refused by the CI ingest principal anyway.
+name: pr-scan
+
+on:
+  pull_request_target:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pr-scan:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        image: [sim-dsp-bidder, sim-dsp-tunnel-client]
+    env:
+      TRIVY_VERSION: "0.72.0"
+      TRIVY_SHA256: bbb64b9695866ce4a7a8f5c9592002c5961cab378577fa3f8a040df362b9b2ea
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          persist-credentials: false
+      - name: Assess the merge commit's workflows (no upload, fails on any finding)
+        uses: iebnab/sim-iac-action/deploy/ci-integration/github/iac-action@d7ed72142be491dd49b0f323e88f3a81f8a000e7
+        with:
+          class: ci
+          assess-only: "true"
+      - name: Install Trivy 0.72.0 (sha256 verified)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/trivy.tar.gz \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "${TRIVY_SHA256}  /tmp/trivy.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+      - name: Build locally and scan
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          set -euo pipefail
+          docker build --pull --no-cache -f "images/${IMAGE}/Dockerfile" \
+            -t "pr-scan/${IMAGE}:local" "images/${IMAGE}"
+          trivy image --cache-backend memory --scanners vuln,secret --pkg-types os,library \
+            --severity CRITICAL --exit-code 1 "pr-scan/${IMAGE}:local"
