@@ -42,7 +42,7 @@ jobs:
           tags: tag:ci
           version: "1.104.4"
           sha256sum: 624ea093d47d62cf56f17b8332d74b8decda4a1faa610ebc60a1de334b2b3dc9
-      - uses: iebnab/sim-iac-action/deploy/ci-integration/github/iac-action@a5c6a17f3d6433b9d69821735b30352d303812bd
+      - uses: iebnab/sim-iac-action/deploy/ci-integration/github/iac-action@7285eb8ad05f807240db02e2568bbfa1ff3c7c2e
         with:
           class: ci
           ingest-url: ${{ env.INGEST_URL }}

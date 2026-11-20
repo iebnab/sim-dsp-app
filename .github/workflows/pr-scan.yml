@@ -38,7 +38,7 @@ jobs:
           ref: refs/pull/${{ github.event.pull_request.number }}/merge
           persist-credentials: false
       - name: Assess the merge commit's workflows (no upload, fails on any finding)
-        uses: iebnab/sim-iac-action/deploy/ci-integration/github/iac-action@a5c6a17f3d6433b9d69821735b30352d303812bd
+        uses: iebnab/sim-iac-action/deploy/ci-integration/github/iac-action@7285eb8ad05f807240db02e2568bbfa1ff3c7c2e
         with:
           class: ci
           assess-only: "true"
