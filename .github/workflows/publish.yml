@@ -286,6 +286,17 @@ jobs:
             -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" \
             --data-binary @verification.json
           cosign copy "$staged" "${RELEASE}/${IMAGE}:${GITHUB_SHA}"
+          released="${RELEASE}/${IMAGE}@${DIGEST}"
+          cosign verify --certificate-identity "$identity" --certificate-oidc-issuer "$issuer" \
+            --output json "$released" > release-verify.json
+          cosign verify-attestation --type vuln --certificate-identity "$identity" \
+            --certificate-oidc-issuer "$issuer" "$released" > /dev/null
+          cosign verify-attestation --type slsaprovenance1 --certificate-identity "$identity" \
+            --certificate-oidc-issuer "$issuer" "$released" > /dev/null
+          jq --arg r "${RELEASE}/${IMAGE}" '.image_repository = $r' verification.json > release-verification.json
+          curl -fsS -o release-verification-accepted.json -X POST "${INGEST_URL}/api/ingest/ci/verification" \
+            -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" \
+            --data-binary @release-verification.json
           jq -c . verification-accepted.json
       - name: Retain signed release evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -297,6 +308,9 @@ jobs:
             verification-accepted.json
             verify.json
             provenance.json
+            release-verify.json
+            release-verification.json
+            release-verification-accepted.json
       - name: Exchange GitHub OIDC for repository-scoped Artifact Registry access
         id: gcp
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
